@@ -265,6 +265,9 @@ void memory_config::reg_options(class OptionParser *opp) {
   option_parser_register(opp, "-gpgpu_cache:dl2_texture_only", OPT_BOOL,
                          &m_L2_texure_only, "L2 cache used for texture only",
                          "1");
+  option_parser_register(opp, "-gpgpu_cache:dl2_force_miss", OPT_BOOL,
+                         &m_force_l2_miss,
+                         "Treat every L2 cache access as a miss", "0");
   option_parser_register(
       opp, "-gpgpu_n_mem", OPT_UINT32, &m_n_mem,
       "number of memory modules (e.g. memory controllers) in gpu", "8");

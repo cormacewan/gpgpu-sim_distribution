@@ -182,13 +182,14 @@ class l2_cache : public data_cache {
            mem_fetch_interface *memport, mem_fetch_interface *chiplet_port,
            mem_fetch_allocator *mfcreator, enum mem_fetch_status status,
            class gpgpu_sim *gpu, enum cache_gpu_level level,
-           uint32_t sub_partition_id, uint32_t chiplet_id,
+           uint32_t sub_partition_id, uint32_t chiplet_id, bool force_miss,
            class memory_stats_t *stats)
       : data_cache(name, config, core_id, type_id, memport, mfcreator, status,
                    L2_WR_ALLOC_R, L2_WRBK_ACC, gpu, level) {
     m_chiplet_port = chiplet_port;
     m_sub_partition_id = sub_partition_id;
     m_chiplet_id = chiplet_id;
+    m_force_miss = force_miss;
     m_mem_stats = stats;
   }
 
@@ -202,6 +203,7 @@ class l2_cache : public data_cache {
  private:
   mem_fetch_interface *m_chiplet_port;
   uint32_t m_sub_partition_id;
+  bool m_force_miss;
   class memory_stats_t *m_mem_stats;
 };
 
@@ -382,6 +384,7 @@ class memory_sub_partition {
 
   void force_l2_tag_update(new_addr_type addr, unsigned time,
                            mem_access_sector_mask_t mask) {
+    if (!m_L2cache) return;
     m_L2cache->force_tag_access(addr, m_memcpy_cycle_offset + time, mask);
     m_memcpy_cycle_offset += 1;
   }

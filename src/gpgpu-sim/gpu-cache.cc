@@ -37,6 +37,20 @@
 #include "hashing.h"
 #include "stat-tool.h"
 
+namespace {
+class tag_array_force_miss_scope {
+ public:
+  tag_array_force_miss_scope(tag_array *tags, bool force_miss)
+      : m_tags(tags), m_previous(tags->set_force_miss(force_miss)) {}
+
+  ~tag_array_force_miss_scope() { m_tags->set_force_miss(m_previous); }
+
+ private:
+  tag_array *m_tags;
+  bool m_previous;
+};
+}  // namespace
+
 // used to allocate memory that is large enough to adapt the changes in cache
 // size across kernels
 
@@ -266,10 +280,18 @@ enum cache_request_status tag_array::probe(new_addr_type addr, unsigned &idx,
         idx = index;
         return HIT_RESERVED;
       } else if (line->get_status(mask) == VALID) {
+        if (m_force_miss) {
+          idx = index;
+          return MISS;
+        }
         idx = index;
         return HIT;
       } else if (line->get_status(mask) == MODIFIED) {
         if ((!is_write && line->is_readable(mask)) || is_write) {
+          if (m_force_miss) {
+            idx = index;
+            return MISS;
+          }
           idx = index;
           return HIT;
         } else {
@@ -2006,6 +2028,14 @@ enum cache_request_status data_cache::process_tag_probe(
 enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
                                              unsigned time,
                                              std::list<cache_event> &events) {
+  return access(addr, mf, time, events, false);
+}
+
+enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
+                                             unsigned time,
+                                             std::list<cache_event> &events,
+                                             bool force_miss) {
+  tag_array_force_miss_scope force_miss_scope(m_tag_array, force_miss);
   assert(mf->get_data_size() <= m_config.get_atom_sz());
   bool wr = mf->get_is_write();
   new_addr_type block_addr = m_config.block_addr(addr);

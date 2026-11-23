@@ -991,6 +991,11 @@ class tag_array {
   void add_pending_line(mem_fetch *mf);
   void remove_pending_line(mem_fetch *mf);
   void inc_dirty() { m_dirty++; }
+  bool set_force_miss(bool force_miss) {
+    bool previous = m_force_miss;
+    m_force_miss = force_miss;
+    return previous;
+  }
 
  protected:
   // This constructor is intended for use only from derived classes that wish to
@@ -1023,6 +1028,7 @@ class tag_array {
   int m_type_id;  // what kind of cache is this (normal, texture, constant)
 
   bool is_used;  // a flag if the whole cache has ever been accessed before
+  bool m_force_miss = false;
 
   typedef tr1_hash_map<new_addr_type, unsigned> line_table;
   line_table pending_lines;
@@ -1593,6 +1599,11 @@ class data_cache : public baseline_cache {
                                            std::list<cache_event> &events);
 
  protected:
+  enum cache_request_status access(new_addr_type addr, mem_fetch *mf,
+                                   unsigned time,
+                                   std::list<cache_event> &events,
+                                   bool force_miss);
+
   data_cache(const char *name, cache_config &config, int core_id, int type_id,
              mem_fetch_interface *memport, mem_fetch_allocator *mfcreator,
              enum mem_fetch_status status, tag_array *new_tag_array,

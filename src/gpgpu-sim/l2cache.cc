@@ -454,6 +454,7 @@ memory_sub_partition::memory_sub_partition(
     std::vector<LatencyQueue<mem_fetch *>> &request_1_to_0,
     std::vector<LatencyQueue<mem_fetch *>> &reply_0_to_1,
     std::vector<LatencyQueue<mem_fetch *>> &reply_1_to_0) {
+  m_L2cache = nullptr;
   m_id = sub_partition_id;
   m_config = config;
   m_stats = stats;
@@ -483,7 +484,8 @@ memory_sub_partition::memory_sub_partition(
     m_L2cache = new l2_cache(L2c_name, m_config->m_L2_config, -1, -1,
                              m_L2interface, m_chiplet_interface, m_mf_allocator,
                              IN_PARTITION_L2_MISS_QUEUE, gpu, L2_GPU_CACHE,
-                             m_id, m_chiplet_id, stats);
+                             m_id, m_chiplet_id, m_config->m_force_l2_miss,
+                             stats);
 
   unsigned int icnt_L2;
   unsigned int L2_dram;
@@ -1107,7 +1109,7 @@ void Chipletinterface::push(mem_fetch *mf) {
 enum cache_request_status l2_cache::access(new_addr_type addr, mem_fetch *mf,
                                            unsigned time,
                                            std::list<cache_event> &events) {
-  return data_cache::access(addr, mf, time, events);
+  return data_cache::access(addr, mf, time, events, m_force_miss);
 }
 
 void l2_cache::cycle() {

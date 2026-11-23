@@ -343,6 +343,7 @@ class memory_config {
   bool m_valid;
   mutable l2_cache_config m_L2_config;
   bool m_L2_texure_only;
+  bool m_force_l2_miss;
 
   char *gpgpu_dram_timing_opt;
   char *gpgpu_L2_queue_config;
