@@ -73,6 +73,12 @@
 #include "stats.h"
 #include "visualizer.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <limits>
+#include <stdexcept>
+
 #ifdef GPGPUSIM_POWER_MODEL
 #include "power_interface.h"
 #else
@@ -234,6 +240,31 @@ void power_config::reg_options(class OptionParser *opp) {
   option_parser_register(opp, "-steady_state_definition", OPT_CSTR,
                          &gpu_steady_state_definition,
                          "allowed deviation:number of samples", "8:4");
+}
+
+uint64_t gpgpu_sim::sample_failure_interval()
+{
+    std::exponential_distribution<double> dist(
+        1.0 / static_cast<double>(
+            m_config.power_failure_mtbf
+        )
+    );
+
+    double interval = dist(m_failure_rng);
+
+    if (!std::isfinite(interval) ||
+        interval >= static_cast<double>(
+            std::numeric_limits<uint64_t>::max()
+        )) {
+        throw std::runtime_error(
+            "Power failure interval overflow"
+        );
+    }
+
+    return std::max(
+        uint64_t(1),
+        static_cast<uint64_t>(std::ceil(interval))
+    );
 }
 
 void memory_config::reg_options(class OptionParser *opp) {
@@ -832,6 +863,37 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
                          &(gpgpu_ctx->device_runtime->g_TB_launch_latency),
                          "thread block launch latency in cycles. Default: 0",
                          "0");
+
+//---------------------------------------------------
+// Extra options for power failure simulation                         
+  option_parser_register(
+    opp,
+    "-power_failure_enabled",
+    OPT_BOOL,
+    &power_failure_enabled,
+    "Enable random power failures",
+    "0"
+);
+
+option_parser_register(
+    opp,
+    "-power_failure_mtbf",
+    OPT_UINT32,
+    &power_failure_mtbf,
+    "Mean simulation steps between failures",
+    "1000000"
+);
+
+option_parser_register(
+    opp,
+    "-power_failure_seed",
+    OPT_UINT32,
+    &power_failure_seed,
+    "Random seed for power failures",
+    "42"
+);
+
+//---------------------------------------------------
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1276,6 +1338,42 @@ gpgpu_sim::gpgpu_sim(const gpgpu_sim_config &config, gpgpu_context *ctx)
   // DRAM traffic per memory controller
   perf_counters.add_statistics_counter(m_memory_stats->dram_reads_per_mc);
   perf_counters.add_statistics_counter(m_memory_stats->dram_writes_per_mc);
+
+  if (m_config.power_failure_enabled) {
+
+    if (m_config.power_failure_mtbf == 0) {
+        throw std::runtime_error(
+            "Power failure MTBF must be positive"
+        );
+    }
+
+    m_failure_rng.seed(m_config.power_failure_seed);
+
+    m_power_step = 0;
+    m_failure_count = 0;
+
+    m_next_failure_step =
+        sample_failure_interval();
+
+    m_failure_initialized = true;
+
+    printf(
+        "POWER: Enabled, MTBF=%u, seed=%u\n",
+        m_config.power_failure_mtbf,
+        m_config.power_failure_seed
+    );
+}
+}
+
+void gpgpu_sim::handle_power_failure()
+{
+    ++m_failure_count;
+
+    printf(
+        "POWER_FAILURE: event=%llu step=%llu\n",
+        (unsigned long long)m_failure_count,
+        (unsigned long long)m_power_step
+    );
 }
 
 void sst_gpgpu_sim::SST_receive_mem_reply(unsigned core_id, void *mem_req) {
@@ -2235,6 +2333,29 @@ unsigned long long g_single_step =
     0;  // set this in gdb to single step the pipeline
 
 void gpgpu_sim::cycle() {
+
+  if (m_config.power_failure_enabled &&
+    m_failure_initialized) {
+
+    ++m_power_step;
+
+    if (m_power_step >= m_next_failure_step) {
+
+        handle_power_failure();
+
+        uint64_t interval =
+            sample_failure_interval();
+
+        if (interval >
+            UINT64_MAX - m_power_step) {
+            m_next_failure_step = UINT64_MAX;
+        } else {
+            m_next_failure_step =
+                m_power_step + interval;
+        }
+    }
+}
+
   int clock_mask = next_clock_domain();
 
   if (clock_mask & ICNT) {

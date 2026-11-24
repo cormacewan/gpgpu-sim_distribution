@@ -45,6 +45,9 @@
 #include "l2cache.h"
 #include "shader.h"
 
+#include <random>
+#include <cstdint>
+
 // constants for statistics printouts
 #define GPU_RSTAT_SHD_INFO 0x1
 #define GPU_RSTAT_BW_STAT 0x2
@@ -496,6 +499,13 @@ class gpgpu_sim_config : public power_config,
 
   bool flush_l1() const { return gpgpu_flush_l1_cache; }
 
+  //------------------------------
+  // Extra power failure configuration
+  bool power_failure_enabled;
+  unsigned power_failure_mtbf; // MTBF: Mean Time Between Failures in cycles
+  unsigned power_failure_seed;
+  //------------------------------
+
  private:
   void init_clock_domains(void);
 
@@ -604,6 +614,19 @@ class watchpoint_event {
 
 class gpgpu_sim : public gpgpu_t {
  public:
+
+  
+  std::mt19937 m_failure_rng;
+
+  uint64_t m_power_step = 0;
+  uint64_t m_next_failure_step = 0;
+  uint64_t m_failure_count = 0;
+
+  bool m_failure_initialized = false;
+
+  uint64_t sample_failure_interval();
+  void handle_power_failure();
+  
   gpgpu_sim(const gpgpu_sim_config &config, gpgpu_context *ctx);
 
   void set_prop(struct cudaDeviceProp *prop);
